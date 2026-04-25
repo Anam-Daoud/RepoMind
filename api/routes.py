@@ -1,6 +1,22 @@
-from fastapi import APIRouter, BackgroundTasks
-import traceback
+"""
+FastAPI Routes for RepoMind Agent System
+Handles job creation, status tracking, and refinement requests.
+"""
 
+# -----------------------
+# Standard library imports
+# -----------------------
+import traceback
+from urllib.parse import urlparse
+
+# -----------------------
+# Third-party imports
+# -----------------------
+from fastapi import APIRouter, BackgroundTasks
+
+# -----------------------
+# Local application imports
+# -----------------------
 from api.schemas import (
     RunRequest,
     RunResponse,
@@ -18,55 +34,38 @@ from api.errors import (
     JobNotFoundError,
 )
 
-from agent.executor import run_agent
-from tools.pr_tool import create_pull_request
-
-
 router = APIRouter(tags=["Agent"])
 
 
-# -------------------------------
-# Background worker
-# -------------------------------
+# =========================================================
+# Background Worker
+# =========================================================
 def process_job(job_id: str):
-    import traceback
-
+    """
+    Background worker that simulates job execution.
+    (Agent execution temporarily disabled as per instructor instructions)
+    """
     try:
-        print("\n🚀 JOB STARTED:", job_id)
+        print(f"\n🚀 JOB STARTED: {job_id}")
 
         job = job_manager.get(job_id)
-        print("📦 Job loaded successfully")
-
         job_manager.update(job_id, status=JobStatus.running)
 
-        print("🧪 TEST 1: BEFORE AGENT")
+        print("📦 Job marked as running")
 
-        # ❌ COMMENT OUT EVERYTHING BELOW FOR NOW
-        # result = run_agent(
-        #     repo_url=job.repo_url,
-        #     instruction=job.instruction,
-        # )
+        # -------------------------------------------------
+        # Simulated processing (agent disabled)
+        # -------------------------------------------------
+        summary = "Test summary (execution skipped as instructed)"
 
-        print("🧪 TEST 2: AFTER AGENT (skipped)")
+        # -------------------------------------------------
+        # Simulated PR creation
+        # -------------------------------------------------
+        pr_url = None  # No real PR created in test mode
 
-        # fake result
-        summary = "Test summary"
-
-        print("🧪 TEST 3: BEFORE PR")
-
-        # ❌ COMMENT OUT PR TOO
-        # pr = create_pull_request(
-        #     token="dummy_token",
-        #     repo_full_name="owner/repo",
-        #     title="Test PR",
-        #     body=summary,
-        #     head_branch="auto-update-branch",
-        # )
-
-        pr_url = "https://github.com/fake/repo/pull/1"
-
-        print("🧪 TEST 4: BEFORE UPDATE")
-
+        # -------------------------------------------------
+        # Update job as completed
+        # -------------------------------------------------
         job_manager.update(
             job_id,
             status=JobStatus.completed,
@@ -74,27 +73,32 @@ def process_job(job_id: str):
             diff_summary=summary,
         )
 
-        print("🎉 JOB COMPLETED (TEST MODE)")
+        print("🎉 JOB COMPLETED")
 
     except Exception as e:
-        print("\n❌ ERROR:")
+        print("\n❌ ERROR IN JOB:")
         traceback.print_exc()
 
-        job_manager.update(
-            job_id,
-            status=JobStatus.failed,
-            error_message=str(e),
-        )
+        try:
+            job_manager.update(
+                job_id,
+                status=JobStatus.failed,
+                error_message=str(e),
+            )
+        except Exception as inner_error:
+            print("🔥 Failed to update job status:", inner_error)
 
-# -------------------------------
+
+# =========================================================
 # POST /run
-# -------------------------------
-
-
+# =========================================================
 @router.post("/run", response_model=RunResponse)
 async def run(request: RunRequest, background_tasks: BackgroundTasks):
+    """Create and start a new analysis job."""
 
-    if not request.repo_url.startswith("https://github.com/"):
+    # Validate GitHub URL properly
+    parsed = urlparse(request.repo_url)
+    if parsed.netloc != "github.com":
         raise InvalidRepoURLError("Invalid GitHub URL")
 
     if not request.instruction.strip():
@@ -113,11 +117,12 @@ async def run(request: RunRequest, background_tasks: BackgroundTasks):
     )
 
 
-# -------------------------------
+# =========================================================
 # GET /status/{job_id}
-# -------------------------------
+# =========================================================
 @router.get("/status/{job_id}", response_model=JobStatusResponse)
 async def status(job_id: str):
+    """Get current status of a job."""
 
     try:
         job = job_manager.get(job_id)
@@ -133,11 +138,12 @@ async def status(job_id: str):
     )
 
 
-# -------------------------------
+# =========================================================
 # POST /refine
-# -------------------------------
+# =========================================================
 @router.post("/refine", response_model=RefineResponse)
 async def refine(request: RefineRequest, background_tasks: BackgroundTasks):
+    """Refine an existing job with new instructions."""
 
     try:
         job = job_manager.get(request.job_id)
